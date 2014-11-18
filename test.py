@@ -89,12 +89,12 @@ def prepare_corpus(raw_documents):
 
     return texts
 
-def run_gensim(texts):
+from gensim import corpora, models, similarities
+
+def run_gensim(texts, pr, lsi):
     # print texts
     import logging
     logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
-
-    from gensim import corpora, models, similarities
 
     dictionary = corpora.Dictionary(texts)
     corpus = [dictionary.doc2bow(text) for text in texts]
@@ -102,11 +102,29 @@ def run_gensim(texts):
     tfidf = models.TfidfModel(corpus)
     corpus_tfidf = tfidf[corpus]
 
-    # lsi = models.LsiModel(corpus_tfidf, id2word=dictionary, num_topics=300)
-    # lsi.print_topics(15)
+    model = None
+    if not lsi == None:
+        model = models.LsiModel(corpus_tfidf, id2word=dictionary, num_topics=300)
+    else:
+        model = models.LdaModel(corpus_tfidf, id2word=dictionary, num_topics=300)
 
-    lda = models.LdaModel(corpus_tfidf, id2word=dictionary, num_topics=300)
-    lda.print_topics(15)
+    if pr:
+        model.print_topics(num_topics=-1)
+
+    return (model, dictionary, corpus_tfidf)
+
+def get_sim(lda, corpus, dictionary, data, query):
+    vec_bow = dictionary.doc2bow(query.lower().split())
+    vec_lsi = lda[vec_bow]
+
+    index = similarities.MatrixSimilarity(lda[corpus])
+
+    sims = index[vec_lsi]
+    sims = sorted(enumerate(sims), key=lambda item: -item[1])
+    sims = [(data[x[0]][0], data[x[0]][1], x[1]) for x in sims if x[1] > 0.05]
+
+    for docs in sims:
+        print docs
 
 import plotly.plotly as py
 from plotly.graph_objs import *
@@ -160,6 +178,10 @@ if __name__ == "__main__":
     sentiment = None
     texts = None
     credentials = None
+
+    lda = None
+    processed_corpus = None
+    dictionary = None
 
     uname = os.getenv("PLOTLY_USERNAME", None)
     api = os.getenv("PLOTLY_API", None)
@@ -222,7 +244,21 @@ if __name__ == "__main__":
                 print "Need to run 'prepare' first."
                 continue
 
-            run_gensim(texts)
+            use_lsi = raw_input("Want to use LSI (y or nothing)? ")
+            if use_lsi == "":
+                use_lsi = None
+            else:
+                use_lsi = True
+
+            lda, dictionary, processed_corpus = run_gensim(texts, True, use_lsi)
+        elif command == "getsim":
+            if lda == None:
+                print "Need to run 'gensim' first."
+                continue
+
+            query = raw_input("Query: ")
+
+            get_sim(lda, processed_corpus, dictionary, [(source[0], story[0]) for source in data for story in source[1]], query)
         elif command == "help":
             print "quit"
             print "download"
