@@ -1,4 +1,4 @@
-import feedparser, requests, html2text
+import feedparser, requests, html2text, nltk
 import sys, codecs, os
 
 from textblob import TextBlob
@@ -12,6 +12,16 @@ currentFeeds = [
     ("FOX", "http://feeds.foxnews.com/foxnews/latest?format=xml"),
 ]
 
+def set_sources():
+    newFeeds = []
+    while True:
+        source = raw_input("Source as Title,Source URL (or 'quit' to stop): ")
+        if source == "quit":
+            print "Set Sources to", newFeeds
+            return newFeeds
+
+        data = source.split(",")
+        newFeeds.append((data[0], data[1]))
 
 def download_sources():
     raw_documents = []
@@ -70,6 +80,7 @@ def prepare_corpus(raw_documents):
     # remove common words
     print "Calculating Stoplist"
     stoplist = set([x.rstrip() for x in codecs.open("stop_list.txt", encoding='utf-8') if not x.startswith("#")])
+    stoplist = stoplist.union(set(nltk.corpus.stopwords.words("english")))
     # print stoplist
 
     print "Removing Stoplist and Stemming"
@@ -89,7 +100,9 @@ def prepare_corpus(raw_documents):
 
     return texts
 
-from gensim import corpora, models, similarities
+from gensim import corpora, models, similarities, matutils
+
+NUM_TOPICS = 300
 
 def run_gensim(texts, pr, lsi):
     # print texts
@@ -104,9 +117,9 @@ def run_gensim(texts, pr, lsi):
 
     model = None
     if not lsi == None:
-        model = models.LsiModel(corpus_tfidf, id2word=dictionary, num_topics=300)
+        model = models.LsiModel(corpus_tfidf, id2word=dictionary, num_topics=NUM_TOPICS)
     else:
-        model = models.LdaModel(corpus_tfidf, id2word=dictionary, num_topics=300)
+        model = models.LdaModel(corpus_tfidf, id2word=dictionary, num_topics=NUM_TOPICS)
 
     if pr:
         model.print_topics(num_topics=-1)
@@ -160,6 +173,24 @@ def plot_sentiment(credentials, filename, sentiment, prop):
     plot_url = py.plot(fig, filename=filename)
     print "Your plot.ly is done at", plot_url
 
+from itertools import chain
+
+def try_cluster_1(lda_corpus, documents):
+    scores = list(chain(*[[score for topic,score in topic] \
+                          for topic in [doc for doc in lda_corpus]]))
+    threshold = sum(scores)/len(scores)
+    print "Threshold: ", threshold
+    print
+
+    for topic in range(len(i)):
+        cluster = [j for i,j in zip(lda_corpus,documents) if i[topic][1] > threshold]
+        print cluster
+
+def try_cluster_2(lda_corpus, documents):
+    from sklearn.cluster import KMeans
+    kmeans = KMeans(20).fit(matutils.corpus2dense(lda_corpus, NUM_TOPICS))
+    print kmeans.labels_
+
 import json
 
 def save_corpus(corpus, filename):
@@ -203,14 +234,29 @@ if __name__ == "__main__":
 
             where = raw_input("Filename: ")
             try:
-                save_corpus(data, where)
+                save_corpus([
+                    data,
+                    sentiment,
+                    texts,
+                    credentials,
+                    lda,
+                    processed_corpus,
+                    dictionary,
+                ], where)
             except:
                 print "Unable to save data.", sys.exc_info()[0]
         elif command == "load":
             where = raw_input("Filename: ")
 
             try:
-                data = load_corpus(where)
+                tempData = load_corpus(where)
+                data = tempData[0]
+                sentiment = tempData[1]
+                texts = tempData[2]
+                credentials = tempData[3]
+                lda = tempData[4]
+                processed_corpus = tempData[5]
+                dictionary = tempData[6]
             except:
                 print "Unable to load data.", sys.exc_info()[0]
         elif command == "sentiment":
@@ -259,6 +305,14 @@ if __name__ == "__main__":
             query = raw_input("Query: ")
 
             get_sim(lda, processed_corpus, dictionary, [(source[0], story[0]) for source in data for story in source[1]], query)
+        elif command == "cluster":
+            if lda == None:
+                print "Need to run 'gensim' first."
+                continue
+
+            try_cluster_2(processed_corpus, [(source[0], story[0]) for source in data for story in source[1]])
+        elif command == "setsources":
+            currentFeeds = set_sources()
         elif command == "help":
             print "quit"
             print "download"
