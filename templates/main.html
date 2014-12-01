@@ -1,0 +1,87 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Harbinger Post</title>
+    <link href="//maxcdn.bootstrapcdn.com/font-awesome/4.2.0/css/font-awesome.min.css" rel="stylesheet">
+    <link href="//maxcdn.bootstrapcdn.com/bootswatch/3.3.0/journal/bootstrap.min.css" rel="stylesheet">
+    <link href="/static/styles.css" rel="stylesheet">
+    <link href="/static/css/weather-icons.min.css" rel="stylesheet">
+  </head>
+  <body>
+    <div class="container">
+      <div class="text-center wuva-brand">
+        <h1><span class="text-muted">The</span> <i>Harbinger Post</i></h1>
+        {% if today %}
+        <p class="text-muted">
+          <small>
+            {{ today.strftime("%A, %B %d") }}
+            <!-- <i class="wi wi-day-cloudy"></i> {{ temp }}&deg; !-->
+          </small>
+        </p>
+        {% endif %}
+      </div>
+      <nav class="navbar navbar-default" role="navigation">
+        <div class="container-fluid">
+          <!-- Collect the nav links, forms, and other content for toggling -->
+          <div class="collapse navbar-collapse" id="wuva-navbar-collapse">
+            <ul class="nav navbar-nav">
+              <li class="{% block home_active %}active{% endblock %}"><a href="/">Home</a></li>
+              <li class="{% block stats_active %}{% endblock %}"><a href="/stats">Stats</a></li>
+            </ul>
+          </div><!-- /.navbar-collapse -->
+        </div><!-- /.container-fluid -->
+      </nav>
+      <!-- Begin Content !-->
+      {% block content %}
+      <div class="row">
+        {% for s in sims %}
+        <div class="col-md-6">
+          <h3>
+            <a href="{{ s[0][0][4] }}">
+              {{ s[0][0][1] }}
+            </a>
+          </h3>
+          {% if not s[1] == None %}
+          <a href="{{ s[1][1] }}" class="thumbnail pull-left" style="margin: 0 10px 10px 0;">
+            <img src="{{ s[1][0] }}" alt="{{ s[1][2] }}">
+          </a>
+          {% endif %}
+          <p>
+            <strong>[{{ s[0][0][0] }}]</strong>
+            {{ s[0][0][3]|truncate(500) }}
+          </p>
+          <p class="text-muted">
+            <small>
+              Polarity: {{ s[0][0][5][0]|round(3) }},
+              Objectivity: {{ s[0][0][5][1]|round(3) }}
+            </small>
+          </p>
+          <ul class="list-group">
+            {% for doc in s[0][1:] %}
+            <li class="list-group-item">
+              <strong>[{{ doc[0] }}]</strong>
+              <a href="{{ doc[4] }}">{{ doc[1]|truncate(50) }}</a>
+              <br/>
+              <small>
+                Polarity: 
+                <span class="{% if doc[5][0] > 0 %}text-success{% else %}text-danger{% endif %}">{{ doc[5][0]|round(3) }}</span>,
+                Objectivity:
+                <span style="color: rgba(0, 0, 0, {{ (doc[5][1]|round(3) / 2) + 0.5 }})">{{ doc[5][1]|round(3) }}</span>
+              </small>
+            </li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% endfor %}
+      </div>
+      {% endblock %}
+      <hr/>
+      <p>Thanks for reading!</p>
+    </div>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/Chart.js/0.2.0/Chart.min.js"></script>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/jquery/2.1.1/jquery.min.js"></script>
+    <script src="//maxcdn.bootstrapcdn.com/bootstrap/3.3.1/js/bootstrap.min.js"></script>
+    {% block moreScripts %}
+    {% endblock %}
+  </body>
+</html>

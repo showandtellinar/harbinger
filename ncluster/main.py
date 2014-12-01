@@ -3,6 +3,15 @@ import sys, codecs, os
 
 from textblob import TextBlob
 
+import traceback
+
+# Summarize
+from sumy.parsers.html import HtmlParser
+from sumy.nlp.tokenizers import Tokenizer
+from sumy.summarizers.lsa import LsaSummarizer
+from sumy.nlp.stemmers.czech import stem_word
+from sumy.utils import get_stop_words
+
 currentFeeds = [
     ("BBC", "http://feeds.bbci.co.uk/news/rss.xml"),
     ("CNN", "http://rss.cnn.com/rss/cnn_topstories.rss"),
@@ -10,6 +19,11 @@ currentFeeds = [
     ("ABC", "http://feeds.abcnews.com/abcnews/topstories"),
     ("Al Jazeera", "http://www.aljazeera.com/Services/Rss/?PostingId=2007731105943979989"),
     ("FOX", "http://feeds.foxnews.com/foxnews/latest?format=xml"),
+    # ("Washington Post World", "http://feeds.washingtonpost.com/rss/world"),
+    ("Washington Post National", "http://feeds.washingtonpost.com/rss/national"),
+    ("New York Times", "http://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml"),
+    ("The Economist", "http://www.economist.com/sections/united-states/rss.xml"),
+    ("NPR", "http://www.npr.org/rss/rss.php?id=1001"),
 ]
 
 def set_sources():
@@ -23,8 +37,9 @@ def set_sources():
         data = source.split(",")
         newFeeds.append((data[0], data[1]))
 
-def download_sources():
+def download_sources(summarize=True, sources=currentFeeds):
     raw_documents = []
+    complete_urls = []
 
     # Download News Stories
     converter = html2text.HTML2Text()
@@ -35,11 +50,20 @@ def download_sources():
     count_error = 0
     document_count = 0
 
+    feed_count = -1
+
     for url in currentFeeds:
+        feed_count += 1
+        current_feed_document = 0
+
         currentStories = []
         feed = feedparser.parse(url[1])
         for story in feed.entries:
-            if story.title.startswith(u'VIDEO:'):
+            current_feed_document += 1
+
+            if story.title.startswith(u'VIDEO:') or story.title.startswith(u'AUDIO'):
+                continue
+            if story.link in complete_urls:
                 continue
 
             try:
@@ -47,19 +71,35 @@ def download_sources():
 
                 html = res.text
                 title = story.title.encode('utf-8')
-                print feed.feed.title.encode('utf-8') + " - " + title
+                
+                completion = ((feed_count + (current_feed_document / float(len(feed.entries)))) / (float(len(currentFeeds))))* 100
+                
+                print "[" + ("%.2f" % completion) + "%] \t " + feed.feed.title.encode('utf-8') + " - " + title
 
                 raw_text = converter.handle(html)
-                currentStories.append((title, raw_text))
+                if summarize:
+                    parser = HtmlParser.from_string(html, None, Tokenizer("english"))
+                
+                    summarizer = LsaSummarizer(stem_word)
+                    summarizer.stop_words = get_stop_words("english")
+
+                    sum_text = [sentence for sentence in summarizer(parser.document, 20)]
+                    raw_text = (" ".join([str(sentence) for sentence in sum_text])).decode('utf-8')
+                    # print raw_text
+
+                stats = TextBlob(raw_text)
+                currentStories.append((title, raw_text, story.link, stats.sentiment, story.published_parsed))
+                complete_urls.append(story.link)
+
                 document_count += 1
 
-                # print "\t Sentiment Analysis", TextBlob(raw_text).sentiment
             except KeyboardInterrupt:
                 print "Quitting from Keyboard Interrupt."
                 sys.exit(0)
             except:
                 count_error += 1
                 print "\t Error occurred while processing that story:", sys.exc_info()[0]
+                traceback.print_exc()
 
         raw_documents.append((url[0], currentStories))
 
@@ -105,14 +145,10 @@ from gensim import corpora, models, similarities, matutils
 NUM_TOPICS = 300
 
 def run_gensim(texts, pr, lsi):
-    # print texts
-    import logging
-    logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
-
     dictionary = corpora.Dictionary(texts)
     corpus = [dictionary.doc2bow(text) for text in texts]
 
-    tfidf = models.TfidfModel(corpus)
+    tfidf = models.TfidfModel(corpus, normalize=True)
     corpus_tfidf = tfidf[corpus]
 
     model = None
@@ -134,10 +170,11 @@ def get_sim(lda, corpus, dictionary, data, query):
 
     sims = index[vec_lsi]
     sims = sorted(enumerate(sims), key=lambda item: -item[1])
-    sims = [(data[x[0]][0], data[x[0]][1], x[1]) for x in sims if x[1] > 0.05]
+    sims = [(data[x[0]][0], data[x[0]][1], x[1], data[x[0]][2], data[x[0]][3], data[x[0]][4]) for x in sims if x[1] > 0.2]
 
-    for docs in sims:
-        print docs
+    # for docs in sims:
+    #    print docs
+    return sims
 
 import plotly.plotly as py
 from plotly.graph_objs import *
@@ -175,21 +212,52 @@ def plot_sentiment(credentials, filename, sentiment, prop):
 
 from itertools import chain
 
-def try_cluster_1(lda_corpus, documents):
+def try_cluster_1(l, lda_corpus, d, documents):
     scores = list(chain(*[[score for topic,score in topic] \
                           for topic in [doc for doc in lda_corpus]]))
     threshold = sum(scores)/len(scores)
+    threshold = 0.2
     print "Threshold: ", threshold
-    print
+    print 
 
-    for topic in range(len(i)):
-        cluster = [j for i,j in zip(lda_corpus,documents) if i[topic][1] > threshold]
+    for topic in range(len(lda_corpus)):
+        cluster = [j for i,j in zip(lda_corpus,documents) if len(i) > topic and i[topic][1] > threshold]
         print cluster
 
-def try_cluster_2(lda_corpus, documents):
+def try_cluster_2(l, lda_corpus, d, documents):
     from sklearn.cluster import KMeans
     kmeans = KMeans(20).fit(matutils.corpus2dense(lda_corpus, NUM_TOPICS))
     print kmeans.labels_
+
+def try_cluster_3(lda, corpus, dictionary, documents):
+    done = []
+    clusters = []
+
+    for doc in documents:
+        if doc in done:
+            continue
+
+        sims = []
+        for s in get_sim(lda, corpus, dictionary, documents, doc[2]):
+            if not (s[0], s[1]) in done:
+                done.append((s[0], s[1]))
+                sims.append(s)
+        
+        if len(sims) > 0:
+            clusters.append(sims)
+            
+    return clusters
+
+def cluster(filename=None, use_lsi=True):
+    tempData = load_corpus(filename)
+    data = tempData[0]
+    sentiment = tempData[1]
+    texts = tempData[2]
+    credentials = tempData[3]
+
+    lda, dictionary, processed_corpus = run_gensim(texts, True, use_lsi)
+    sims = try_cluster_3(lda, processed_corpus, dictionary, [(source[0], story[0], story[1], story[2], story[3]) for source in data for story in source[1]])
+    return sims
 
 import json
 
@@ -304,13 +372,15 @@ if __name__ == "__main__":
 
             query = raw_input("Query: ")
 
-            get_sim(lda, processed_corpus, dictionary, [(source[0], story[0]) for source in data for story in source[1]], query)
+            get_sim(lda, processed_corpus, dictionary, [(source[0], story[0], story[1]) for source in data for story in source[1]], query)
         elif command == "cluster":
             if lda == None:
                 print "Need to run 'gensim' first."
                 continue
 
-            try_cluster_2(processed_corpus, [(source[0], story[0]) for source in data for story in source[1]])
+            sims = try_cluster_3(lda, processed_corpus, dictionary, [(source[0], story[0], story[1]) for source in data for story in source[1]])
+            for s in sims:
+                print s
         elif command == "setsources":
             currentFeeds = set_sources()
         elif command == "help":

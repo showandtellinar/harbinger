@@ -1,0 +1,20 @@
+.wuva-brand {
+    padding-bottom: 15px;
+}
+
+nav.navbar {
+    border-top: 1px solid #eee;
+    border-bottom: 1px solid #eee;
+    border-left: none;
+    border-right: none;
+    border-radius: 0px;
+    min-height: 0px;
+}
+
+nav.navbar .navbar-nav li {
+    font-size: 12px;
+}
+
+nav.navbar .navbar-nav li a {
+    padding: 5px;
+}
