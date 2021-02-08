@@ -12,7 +12,7 @@ docopt==0.6.2
 feedparser==5.1.3
 gensim==0.10.2
 html2text==2014.9.25
-httplib2==0.9
+httplib2==0.19.0
 itsdangerous==0.24
 kombu==3.0.24
 lxml==4.6.2
