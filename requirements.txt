@@ -15,7 +15,7 @@ html2text==2014.9.25
 httplib2==0.19.0
 itsdangerous==0.24
 kombu==3.0.24
-lxml==4.6.2
+lxml==4.6.3
 matplotlib==1.4.2
 mock==1.0.1
 nltk==3.0.0
